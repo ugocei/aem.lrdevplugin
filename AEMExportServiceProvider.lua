@@ -22,6 +22,10 @@ local LrDialogs = import 'LrDialogs'
 local LrFileUtils = import 'LrFileUtils'
 local LrPathUtils = import 'LrPathUtils'
 local LrView = import 'LrView'
+local LrHttp = import 'LrHttp'
+local LrStringUtils = import 'LrStringUtils'
+local LrErrors = import 'LrErrors'
+
 
 	-- Common shortcuts
 local bind = LrView.bind
@@ -123,6 +127,11 @@ function exportServiceProvider.processRenderedPhotos( functionContext, exportCon
 	-- Make a local reference to the export parameters.
 	
 	local exportSettings = assert( exportContext.propertyTable )
+
+  local authorization = "Basic " .. LrStringUtils.encodeBase64(exportSettings.username .. ':' .. exportSettings.password)
+  local headers = {
+     { field = 'Authorization', value = authorization },
+  }
 		
 	-- Get the # of photos.
 	
@@ -142,7 +151,34 @@ function exportServiceProvider.processRenderedPhotos( functionContext, exportCon
 	  if not rendition.wasSkipped then
 	    -- Get next photo.
 	    local photo = rendition.photo
-      LrDialogs.message('Exporting photo', photo:getFormattedMetadata 'title', 'info')
+			local success, pathOrMessage = rendition:waitForRender()
+			
+			-- Update progress scope again once we've got rendered photo.
+			
+			progressScope:setPortionComplete( ( i - 0.5 ) / nPhotos )
+			
+			-- Check for cancellation again after photo has been rendered.
+			
+			if progressScope:isCanceled() then break end
+			
+			if success then
+  	    local filePath = pathOrMessage
+  	    local fileName = LrPathUtils.leafName(filePath)
+  	    local contentType = 'application/octet-stream' -- TODOmimeTypeFromFormat(exportSettings.LR_format)
+  	    local params = {
+          {name = 'jcr:primaryType', value = 'dam:Asset'},
+          {name = 'file', filePath = filePath, fileName = fileName, contentType = contentType },
+        }
+        local url = exportSettings.url .. '/' .. exportContext.publishedCollectionInfo.name
+        -- LrDialogs.message('Posting Asset', 'File = ' .. rendition.destinationPath .. ', URL = ' .. url, 'info')
+        local result, hdrs = LrHttp.postMultipart(url .. '.createasset.html', params, headers)
+    		if hdrs and hdrs.error then
+    			LrErrors.throwUserError(hdrs.error.nativeCode)
+    		end
+    		rendition:recordPublishedPhotoId(url)
+    		rendition:recordPublishedPhotoUrl(url)
+				LrFileUtils.delete(filePath)
+      end
     end
   end
 end
