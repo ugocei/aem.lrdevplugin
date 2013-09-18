@@ -25,7 +25,8 @@ local LrView = import 'LrView'
 local LrHttp = import 'LrHttp'
 local LrStringUtils = import 'LrStringUtils'
 local LrErrors = import 'LrErrors'
-
+local logger = import 'LrLogger'( 'AEMPublishService' )
+logger:enable( "print" )
 
 	-- Common shortcuts
 local bind = LrView.bind
@@ -164,17 +165,21 @@ function exportServiceProvider.processRenderedPhotos( functionContext, exportCon
 			if success then
   	    local filePath = pathOrMessage
   	    local fileName = LrPathUtils.leafName(filePath)
-  	    local contentType = 'application/octet-stream' -- TODOmimeTypeFromFormat(exportSettings.LR_format)
+  	    local contentType = 'application/octet-stream'
   	    local params = {
           {name = 'jcr:primaryType', value = 'dam:Asset'},
           {name = 'file', filePath = filePath, fileName = fileName, contentType = contentType },
         }
         local url = exportSettings.url .. '/' .. exportContext.publishedCollectionInfo.name
-        -- LrDialogs.message('Posting Asset', 'File = ' .. rendition.destinationPath .. ', URL = ' .. url, 'info')
+        logger:debug('Posting Asset. File = ' .. rendition.destinationPath .. ', URL = ' .. url)
         local result, hdrs = LrHttp.postMultipart(url .. '.createasset.html', params, headers)
+        
     		if hdrs and hdrs.error then
-    			LrErrors.throwUserError(hdrs.error.nativeCode)
+    		  if (hdrs.error.nativeCode ~= 303) then
+    			  LrErrors.throwUserError(hdrs.error.name)
+    			end
     		end
+    		url = url .. '/' .. fileName
     		rendition:recordPublishedPhotoId(url)
     		rendition:recordPublishedPhotoUrl(url)
 				LrFileUtils.delete(filePath)
