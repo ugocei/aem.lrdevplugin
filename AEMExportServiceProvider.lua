@@ -22,9 +22,11 @@ local LrDialogs = import 'LrDialogs'
 local LrFileUtils = import 'LrFileUtils'
 local LrPathUtils = import 'LrPathUtils'
 local LrView = import 'LrView'
-local LrHttp = import 'LrHttp'
 local LrStringUtils = import 'LrStringUtils'
 local LrErrors = import 'LrErrors'
+local LrTasks = import 'LrTasks'
+local LrHttp = import 'LrHttp'
+
 local logger = import 'LrLogger'( 'AEMPublishService' )
 logger:enable( "print" )
 
@@ -130,10 +132,11 @@ function exportServiceProvider.processRenderedPhotos( functionContext, exportCon
 	local exportSettings = assert( exportContext.propertyTable )
 
   local authorization = "Basic " .. LrStringUtils.encodeBase64(exportSettings.username .. ':' .. exportSettings.password)
-  local headers = {
-     { field = 'Authorization', value = authorization },
-  }
-		
+        
+  -- Create the folder (if necessary)
+  local url = exportSettings.url .. '/' .. exportContext.publishedCollectionInfo.name
+  createFolderIfNecessary(exportContext.publishedCollectionInfo.name, url, authorization)
+	
 	-- Get the # of photos.
 	
 	local nPhotos = exportSession:countRenditions()
@@ -163,28 +166,49 @@ function exportServiceProvider.processRenderedPhotos( functionContext, exportCon
 			if progressScope:isCanceled() then break end
 			
 			if success then
-  	    local filePath = pathOrMessage
-  	    local fileName = LrPathUtils.leafName(filePath)
-  	    local contentType = 'application/octet-stream'
-  	    local params = {
-          {name = 'jcr:primaryType', value = 'dam:Asset'},
-          {name = 'file', filePath = filePath, fileName = fileName, contentType = contentType },
-        }
-        local url = exportSettings.url .. '/' .. exportContext.publishedCollectionInfo.name
-        logger:debug('Posting Asset. File = ' .. rendition.destinationPath .. ', URL = ' .. url)
-        local result, hdrs = LrHttp.postMultipart(url .. '.createasset.html', params, headers)
-        
-    		if hdrs and hdrs.error then
-    		  if (hdrs.error.nativeCode ~= 303) then
-    			  LrErrors.throwUserError(hdrs.error.name)
-    			end
-    		end
-    		url = url .. '/' .. fileName
-    		rendition:recordPublishedPhotoId(url)
-    		rendition:recordPublishedPhotoUrl(url)
-				LrFileUtils.delete(filePath)
+			  postFile(pathOrMessage, url, authorization, rendition)
       end
     end
+  end
+end
+
+function postFile(path, url, authorization, rendition)
+  local fileName = LrPathUtils.leafName(path)
+  local contentType = 'application/octet-stream'
+  local headers = {
+     { field = 'Authorization', value = authorization },
+  }
+  local params = {
+    {name = 'jcr:primaryType', value = 'dam:Asset'},
+    {name = 'file', filePath = path, fileName = fileName, contentType = contentType },
+  }
+
+  logger:debug('Posting Asset. File = ' .. path .. ', URL = ' .. url)
+  local result, hdrs = LrHttp.postMultipart(url .. '.createasset.html', params, headers)
+
+	if hdrs and hdrs.error then
+	  if (hdrs.error.nativeCode ~= 303) then
+      logger:error(hdrs.error.name)
+		  LrErrors.throwUserError(hdrs.error.name)
+		end
+	else if (result) then logger:debug(result) end
+	end
+	rendition:recordPublishedPhotoId(url .. '/' .. fileName)
+	rendition:recordPublishedPhotoUrl(url .. '/' .. fileName)
+	LrFileUtils.delete(path)
+end
+
+function createFolderIfNecessary(name, url, authorization)
+  local headers = {
+     { field = 'Authorization', value = authorization },
+  }
+  local result, hdrs = LrHttp.get(url .. '.json', headers)
+  if (hdrs.status ~= 200) then
+    logger:debug('Folder ' .. name .. ' does not exist. Creating it.')
+    local folderParams = {
+      {name = 'jcr:primaryType', value = 'sling:OrderedFolder'},
+    }
+    LrHttp.postMultipart(url, folderParams, headers)
   end
 end
 
