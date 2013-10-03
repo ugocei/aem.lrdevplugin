@@ -108,6 +108,7 @@ function exportServiceProvider.sectionsForTopOfDialog( f, propertyTable )
         },
       },
       
+      --[[
       f:row {
 				f:push_button {
 					title = 'Login',
@@ -118,6 +119,7 @@ function exportServiceProvider.sectionsForTopOfDialog( f, propertyTable )
 				},
 
 			},
+			--]]
 		},
 	}
 
