@@ -185,13 +185,11 @@ function postFile(path, url, authorization, rendition)
 
   logger:debug('Posting Asset. File = ' .. path .. ', URL = ' .. url)
   local result, hdrs = LrHttp.postMultipart(url .. '.createasset.html', params, headers)
+  logger:debug("Status = " .. hdrs.status)
 
-	if hdrs and hdrs.error then
-	  if (hdrs.error.nativeCode ~= 303) then
-      logger:error(hdrs.error.name)
-		  LrErrors.throwUserError(hdrs.error.name)
-		end
-	else if (result) then logger:debug(result) end
+	if hdrs.status ~= 200 then
+      logger:error(result)
+		  LrErrors.throwUserError("Error publishing photo: " .. hdrs.status)
 	end
 	rendition:recordPublishedPhotoId(url .. '/' .. fileName)
 	rendition:recordPublishedPhotoUrl(url .. '/' .. fileName)
