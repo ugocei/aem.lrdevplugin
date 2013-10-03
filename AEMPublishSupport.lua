@@ -17,14 +17,6 @@ publishServiceProvider.titleForGoToPublishedCollection = LOC "$$$/AEM/TitleForGo
 
 publishServiceProvider.titleForGoToPublishedPhoto = LOC "$$$/AEM/TitleForGoToPublishedCollection=Show in AEM"
 
-function publishServiceProvider.deletePhotosFromPublishedCollection( publishSettings, arrayOfPhotoIds, deletedCallback )
-
-	for i, photoId in ipairs( arrayOfPhotoIds ) do
-    -- TODO
-	end
-	
-end
-
 
 function publishServiceProvider.metadataThatTriggersRepublish( publishSettings )
 
@@ -77,6 +69,29 @@ function publishServiceProvider.didUpdatePublishService( publishSettings, info )
       end
     end
 	end)
+end
+
+function publishServiceProvider.deletePhotosFromPublishedCollection( publishSettings, arrayOfPhotoIds, deletedCallback )
+
+	for i, photoId in ipairs( arrayOfPhotoIds ) do
+    logger:debug("Deleting photo " .. photoId)
+    local authorization = "Basic " .. LrStringUtils.encodeBase64(publishSettings.username .. ':' .. publishSettings.password)
+    local headers = {
+       { field = 'Authorization', value = authorization },
+    }
+    local params = {
+      {name = ':operation', value = 'delete'},
+    }
+
+    local result, hdrs = LrHttp.postMultipart(photoId, params, headers)
+    logger:debug(result)
+    if (hdrs.status == 200) then
+      deletedCallback(photoId)
+    else
+      LrErrors.throwUserError(hdrs.status)
+  	end
+	end
+	
 end
 
 function publishServiceProvider.renamePublishedCollection( publishSettings, info )
