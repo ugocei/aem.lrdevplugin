@@ -94,6 +94,53 @@ function publishServiceProvider.deletePhotosFromPublishedCollection( publishSett
 	
 end
 
+function publishServiceProvider.getCommentsFromPublishedCollection( publishSettings, arrayOfPhotoInfo, commentCallback )
+
+  local authorization = "Basic " .. LrStringUtils.encodeBase64(publishSettings.username .. ':' .. publishSettings.password)
+  local headers = {
+     { field = 'Authorization', value = authorization },
+  }
+
+	for i, photoInfo in ipairs( arrayOfPhotoInfo ) do
+		local comments = {}
+	  local response, hdrs = LrHttp.get( photoInfo.url .. '/jcr:content/comments.1.json', headers )
+    -- logger:info( 'Comments: ', response )
+    if not response then
+  	  appearsAlive = false
+  	  LrErrors.throwUserError(LOC "$$$/AEM/Error/NetworkFailure=Could not contact the AEM web service. Please check your Internet connection.")
+  	end
+
+    if hdrs.status == 200 then
+  
+      local comments, pos, err = json.decode (response, 1, nil)
+      if err then
+    	  LrErrors.throwUserError(err)
+      end
+    
+  		local commentList = {}
+  		if comments then
+  			for k,v in pairs( comments ) do
+  			  logger:debug("v = " .. type(v))
+  			  if (type(v) == "table" and v["sling:resourceType"] == "granite/comments/components/comment") then
+    				table.insert( commentList, {
+    								commentId = k,
+    								commentText = v["jcr:description"],
+    								-- dateCreated = comment.datecreate,
+    								username = v.author,
+    								-- realname = comment.authorname,
+    								-- url = comment.permalink
+    							} )
+    				logger:debug("Inserted comment: " .. v["jcr:description"])
+  			  end
+  			end			
+  		end	
+  		commentCallback{ publishedPhoto = photoInfo, comments = commentList }						    
+
+    end
+	end
+
+end
+
 function publishServiceProvider.renamePublishedCollection( publishSettings, info )
 
 	if info.remoteId then
