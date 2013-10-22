@@ -6,6 +6,7 @@ local LrStringUtils = import 'LrStringUtils'
 local LrXml = import 'LrXml'
 local LrFunctionContext = import 'LrFunctionContext'
 local json = require 'DkJson'
+local URL = require 'neturl'
 
 local appearsAlive
 
@@ -34,13 +35,18 @@ end
 
 publishServiceProvider.supportsCustomSortOrder = false
 
+local function createRequestHeaders(publishSettings)
+  local authorization = "Basic " .. LrStringUtils.encodeBase64(publishSettings.username .. ':' .. publishSettings.password)
+  local headers = {
+    { field = 'Authorization', value = authorization },
+  }
+  return headers
+end
+
 function publishServiceProvider.didUpdatePublishService( publishSettings, info )
   LrFunctionContext.callWithContext( 'aem-publish-service', function ( context )
     LrDialogs.attachErrorDialogToFunctionContext( context )
-    local authorization = "Basic " .. LrStringUtils.encodeBase64(publishSettings.username .. ':' .. publishSettings.password)
-    local headers = {
-       { field = 'Authorization', value = authorization },
-    }
+    local headers = createRequestHeaders(publishSettings)
     local response, hdrs = LrHttp.get( publishSettings.url .. '.1.json', headers )
     logger:info( 'AEM response:', response )
     if not response then
@@ -57,13 +63,18 @@ function publishServiceProvider.didUpdatePublishService( publishSettings, info )
   	  LrErrors.throwUserError(err)
     end
     
+    
     for k,v in pairs(obj) do
       if v['jcr:primaryType'] == 'sling:OrderedFolder' then
         if (not v.hidden) then
           local title = v['jcr:title']
           if (not title) then title = k end
           info.publishService.catalog:withWriteAccessDo('Creating published collection', function( context ) 
-            info.publishService:createPublishedCollection(title)
+            local collection = info.publishService:createPublishedCollection(title)
+            local u = URL.parse(publishSettings.url)
+            u.path = '/assets.html' .. u.path .. '/' .. k
+            collection.setRemoteUrl(tostring(u))
+            logger:info( 'Collection URL:', collection.getRemoteUrl() )
           end)
         end  
       end
@@ -73,12 +84,8 @@ end
 
 function publishServiceProvider.deletePhotosFromPublishedCollection( publishSettings, arrayOfPhotoIds, deletedCallback )
 
+  local headers = createRequestHeaders(publishSettings)
 	for i, photoId in ipairs( arrayOfPhotoIds ) do
-    logger:debug("Deleting photo " .. photoId)
-    local authorization = "Basic " .. LrStringUtils.encodeBase64(publishSettings.username .. ':' .. publishSettings.password)
-    local headers = {
-       { field = 'Authorization', value = authorization },
-    }
     local params = {
       {name = ':operation', value = 'delete'},
     }
@@ -96,11 +103,7 @@ end
 
 function publishServiceProvider.getCommentsFromPublishedCollection( publishSettings, arrayOfPhotoInfo, commentCallback )
 
-  local authorization = "Basic " .. LrStringUtils.encodeBase64(publishSettings.username .. ':' .. publishSettings.password)
-  local headers = {
-     { field = 'Authorization', value = authorization },
-  }
-
+  local headers = createRequestHeaders(publishSettings)
 	for i, photoInfo in ipairs( arrayOfPhotoInfo ) do
 		local comments = {}
 	  local response, hdrs = LrHttp.get( photoInfo.url .. '/jcr:content/comments.1.json', headers )
