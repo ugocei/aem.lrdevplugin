@@ -71,10 +71,11 @@ function publishServiceProvider.didUpdatePublishService( publishSettings, info )
           if (not title) then title = k end
           info.publishService.catalog:withWriteAccessDo('Creating published collection', function( context ) 
             local collection = info.publishService:createPublishedCollection(title)
-            local u = URL.parse(publishSettings.url)
-            u.path = '/assets.html' .. u.path .. '/' .. k
-            collection.setRemoteUrl(tostring(u))
-            logger:info( 'Collection URL:', collection.getRemoteUrl() )
+            if (collection) then
+              local u = URL.parse(publishSettings.url)
+              u.path = '/assets.html' .. u.path .. '/' .. k
+              collection:setRemoteUrl(tostring(u))
+            end
           end)
         end  
       end
